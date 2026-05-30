@@ -1,0 +1,23 @@
+# Virtual environment
+.venv/
+
+# Raw/local dataset files and notes
+data/
+notes/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+
+# Testing / tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Editor / operating system files
+.vscode/
+.DS_Store
+Thumbs.db
