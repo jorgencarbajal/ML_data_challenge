@@ -3,7 +3,6 @@
 
 # Raw/local dataset files and notes
 data/
-notes/
 
 # Python generated files
 __pycache__/
