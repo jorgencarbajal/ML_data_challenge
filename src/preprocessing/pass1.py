@@ -286,11 +286,12 @@ def transform_warning_devices(df):
         f"Crossing Warning Expanded {i}" for i in range(1, 13)
     ]
 
-    # Values are normalized to lowercase so capitalization does not matter
+    # take the warning columns, reduce caps and remove whitespaces
     normalized_warnings = df[warning_columns].apply(
         lambda column: column.astype("string").str.strip().str.lower()
     )
 
+    # dict mapping
     device_mapping = {
         "has_gate": ["gates", "gate"],
         "has_cantilever_fls": ["cantilever fls"],
@@ -309,30 +310,149 @@ def transform_warning_devices(df):
         "has_no_warning_device": ["none"]
     }
 
+    # Create one binary column per warning device: 1 if the device appears anywhere in that incident's warning columns, otherwise 0.
     for new_column, possible_values in device_mapping.items():
         df[new_column] = normalized_warnings.isin(possible_values).any(axis=1).astype(int)
 
-    # Remove original multi-field warning columns after creating indicators
+    # drop all the initial warning columns
     df = df.drop(columns=warning_columns)
 
-    print("Warning-device columns created:")
-    print(df[list(device_mapping.keys())].sum())
+    # print("Warning-device columns created:")
+    # print(df[list(device_mapping.keys())].sum())
 
     return df
+
+
+def transform_time_variables(df):
+    df = df.copy()
+
+    # create a datetime series from the "Date" column in the df
+    parsed_date = pd.to_datetime(df["Date"], errors="coerce")
+
+    # create a new year column and assign the year from the corresponding parsed_date column
+    df["year"] = parsed_date.dt.year.astype("Int64")
+
+    # create season from the month contained in Date
+    season_mapping = {
+        12: "Winter", 1: "Winter", 2: "Winter",
+        3: "Spring", 4: "Spring", 5: "Spring",
+        6: "Summer", 7: "Summer", 8: "Summer",
+        9: "Fall", 10: "Fall", 11: "Fall"
+    }
+
+    # add the season feature to the df
+    df["season"] = parsed_date.dt.month.map(season_mapping)
+
+    # convert Time into a usable hour value
+    parsed_time = pd.to_datetime(
+        df["Time"],
+        format="%I:%M %p",
+        errors="coerce"
+    )
+
+    hour = parsed_time.dt.hour
+
+    # create the time of day column
+    df["time_of_day"] = pd.cut(
+        hour,
+        bins=[-1, 5, 11, 17, 23],
+        labels=["Night", "Morning", "Afternoon", "Evening"]
+    )
+
+    # drop month, hour, and time, keep date
+    df = df.drop(columns=["Month", "Hour", "Time"])
+
+    return df
+
+
+def audit_numeric_features(df):
+    numeric_features = [
+        "Train Speed",
+        "Estimated Vehicle Speed",
+        "Number Vehicle Occupants",
+        "Number of Cars",
+        "Temperature",
+        "Vehicle Damage Cost"
+    ]
+
+    audit_rows = []
+    total_rows = len(df)
+
+    for feature in numeric_features:
+        # Treat blank strings as missing, then force numeric conversion
+        original_values = df[feature].replace(r"^\s*$", pd.NA, regex=True)
+        numeric_values = pd.to_numeric(original_values, errors="coerce")
+
+        # Values that were present but could not be converted to numbers
+        invalid_numeric_count = (
+            original_values.notna() & numeric_values.isna()
+        ).sum()
+
+        non_missing_values = numeric_values.dropna()
+
+        q1 = non_missing_values.quantile(0.25)
+        q3 = non_missing_values.quantile(0.75)
+        iqr = q3 - q1
+
+        lower_bound = q1 - (1.5 * iqr)
+        upper_bound = q3 + (1.5 * iqr)
+
+        outlier_count = (
+            (non_missing_values < lower_bound) |
+            (non_missing_values > upper_bound)
+        ).sum()
+
+        audit_rows.append({
+            "Feature": feature,
+            "Total Rows": total_rows,
+            "Missing Count": numeric_values.isna().sum(),
+            "Missing Percent": round(numeric_values.isna().mean() * 100, 2),
+            "Invalid Numeric Count": invalid_numeric_count,
+            "Zero Count": (numeric_values == 0).sum(),
+            "Negative Count": (numeric_values < 0).sum(),
+            "Minimum": non_missing_values.min(),
+            "Q1": q1,
+            "Median": non_missing_values.median(),
+            "Mean": round(non_missing_values.mean(), 2),
+            "Q3": q3,
+            "Maximum": non_missing_values.max(),
+            "Skewness": round(non_missing_values.skew(), 2),
+            "IQR Outlier Count": outlier_count,
+            "IQR Outlier Percent": round((outlier_count / total_rows) * 100, 2)
+        })
+
+    numeric_audit_df = pd.DataFrame(audit_rows)
+
+    numeric_audit_df.to_csv(
+        "data/numeric_feature_audit.csv",
+        index=False
+    )
+
+    print("Saved: data/numeric_feature_audit.csv")
+
+    return numeric_audit_df
 
 
 def main():
     # load the data
     df = pd.read_csv("data/original_data.csv", low_memory=False)
+    print(f"Size of dataframe after: loading; {df.shape}")
 
-    # functions that reduces the data 154 to 51 and remove duplicates
-    df = main_reduction(df=df)
-    df = remove_duplicates(df=df)
+    # functions that reduces the data 154 to 47 and remove duplicates
+    df = main_reduction(df)
+    print(f"Size of dataframe after: initial pass; {df.shape}")
+    df = remove_duplicates(df)
+    print(f"Size of dataframe after: removing duplicates; {df.shape}")
     # audit_outcome_totals(df)
-    df = add_outcome_variables(df=df)
+    df = add_outcome_variables(df)
+    print(f"Size of dataframe after: adding outcomes; {df.shape}")
     # audit_missingness(df=df)
     # audit_categorical_features(df)
     df = transform_warning_devices(df)
+    print(f"Size of dataframe after: transforming warning devices; {df.shape}")
+    df = transform_time_variables(df)
+    print(f"Size of dataframe after: transfoming time variables; {df.shape}")
+    audit_numeric_features(df)
 
     # Consider adjusting filling missing data???
     # Estimated vehicle speed 11.19% missing
@@ -341,8 +461,6 @@ def main():
     # we need to find a way to transform the crossing warning Expanded
 
     df.to_csv("data/pass_1.csv", index=False)
-
-    print(df.shape)
 
 
 if __name__ == "__main__":

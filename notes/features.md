@@ -15,6 +15,8 @@
 
 ### Evaluation
 
+Gower distance, which handles numeric and categorical inputs together. One important detail: if you use Gower distance for mixed numeric and categorical clustering, you generally do not need to z-standardize numeric features first, because Gower already scales numeric differences by each feature's range. Standardization mainly matters if you use a distance such as Euclidean distance.
+
 ## Association (Apriori association rule mining)
 
 - Find context combinations associated with severe outcomes.
