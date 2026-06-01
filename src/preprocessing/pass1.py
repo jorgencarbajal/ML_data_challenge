@@ -7,22 +7,10 @@ import pandas as pd
 
 # global variables
 kept_features = [
-    "Report Key",
-    "Date",
-    "Month",
-    "Hour",
-    "Time",
-    "Highway User",
-    "Estimated Vehicle Speed",
-    "Highway User Position",
-    "User Age",
-    "Number Vehicle Occupants",
-    "Equipment Involved",
-    "Equipment Struck",
-    "Equipment Type",
-    "Track Type",
-    "Number of Cars",
-    "Train Speed",
+    "Crossing Illuminated",
+    "Crossing Users Injured",
+    "Crossing Users Killed",
+    # "Crossing Warning Explanation",
     "Crossing Warning Expanded 1",
     "Crossing Warning Expanded 2",
     "Crossing Warning Expanded 3",
@@ -35,29 +23,41 @@ kept_features = [
     "Crossing Warning Expanded 10",
     "Crossing Warning Expanded 11",
     "Crossing Warning Expanded 12",
-    "Signaled Crossing Warning",
-    "Crossing Warning Explanation",
-    "Warning Connected To Signal",
-    "Crossing Illuminated",
-    "Roadway Condition",
-    "Temperature",
-    "Visibility",
-    "Weather Condition",
-    "View Obstruction",
-    "Highway User Action",
-    "Driver Passed Vehicle",
+    "Date",
     "Driver In Vehicle",
-    "Crossing Users Killed",
-    "Crossing Users Injured",
-    "Employees Killed",
+    "Driver Passed Vehicle",
     "Employees Injured",
-    "Passengers Killed",
+    "Employees Killed",
+    "Equipment Involved",
+    "Equipment Struck",
+    "Equipment Type",
+    "Estimated Vehicle Speed",
+    "Highway User",
+    "Highway User Action",
+    "Highway User Position",
+    "Hour",
+    "Month",
+    "Number of Cars",
+    "Number Vehicle Occupants",
     "Passengers Injured",
-    "Total Killed Form 57",
+    "Passengers Killed",
+    "Report Key",
+    # "Roadway Condition",
+    # "Signaled Crossing Warning",
+    "Temperature",
+    "Time",
+    "Total Injured Form 55A",
     "Total Injured Form 57",
     "Total Killed Form 55A",
-    "Total Injured Form 55A",
-    "Vehicle Damage Cost"
+    "Total Killed Form 57",
+    "Track Type",
+    "Train Speed",
+    # "User Age",
+    "Vehicle Damage Cost",
+    "View Obstruction",
+    "Visibility",
+    "Warning Connected To Signal",
+    "Weather Condition"
 ]
 
 
@@ -223,6 +223,104 @@ def audit_missingness(df):
     print("Saved: data/missingness_by_year_audit.csv")
 
 
+def audit_categorical_features(df):
+    # define the features that are categorical
+    categorical_features = [
+        "Highway User",
+        "Highway User Position",
+        "Equipment Involved",
+        "Equipment Struck",
+        "Equipment Type",
+        "Track Type",
+        "Warning Connected To Signal",
+        "Crossing Illuminated",
+        "Visibility",
+        "Weather Condition",
+        "View Obstruction",
+        "Highway User Action",
+        "Driver Passed Vehicle",
+        "Driver In Vehicle"
+    ]
+
+    # store the dicts
+    audit_rows = []
+    # for percentages
+    total_rows = len(df)
+
+    for feature in categorical_features:
+        # take the feature column and clean up empty spaces, replace with "Missing"
+        values = df[feature].replace(r"^\s*$", pd.NA, regex=True).fillna("Missing")
+
+        # value_counts() goes through the series and counts unique categories
+        category_counts = values.value_counts()
+
+        # loop through the categories and store the metadata
+        for category, count in category_counts.items():
+            audit_rows.append({
+                "Feature": feature,
+                "Category": category,
+                "Count": count,
+                "Percent": round((count / total_rows) * 100, 2)
+            })
+
+    # store in df
+    categorical_audit_df = pd.DataFrame(audit_rows)
+
+    # rearrange ordering so extreme values are at the top
+    categorical_audit_df = categorical_audit_df.sort_values(
+        ["Feature", "Count"],
+        ascending=[True, False]
+    )
+    
+    # save to csv
+    categorical_audit_df.to_csv(
+        "data/categorical_feature_audit.csv",
+        index=False
+    )
+
+
+def transform_warning_devices(df):
+    df = df.copy()
+
+    warning_columns = [
+        f"Crossing Warning Expanded {i}" for i in range(1, 13)
+    ]
+
+    # Values are normalized to lowercase so capitalization does not matter
+    normalized_warnings = df[warning_columns].apply(
+        lambda column: column.astype("string").str.strip().str.lower()
+    )
+
+    device_mapping = {
+        "has_gate": ["gates", "gate"],
+        "has_cantilever_fls": ["cantilever fls"],
+        "has_standard_fls": ["standard fls"],
+        "has_wig_wags": ["wig wags", "wig wag"],
+        "has_highway_traffic_signals": [
+            "highway traffic signals",
+            "hwy. traffic signals"
+        ],
+        "has_audible": ["audible"],
+        "has_crossbucks": ["crossbucks", "crossbuck"],
+        "has_stop_signs": ["stop signs", "stop sign"],
+        "has_watchman": ["watchman"],
+        "has_flagged_by_crew": ["flagged by crew"],
+        "has_other_warning": ["other"],
+        "has_no_warning_device": ["none"]
+    }
+
+    for new_column, possible_values in device_mapping.items():
+        df[new_column] = normalized_warnings.isin(possible_values).any(axis=1).astype(int)
+
+    # Remove original multi-field warning columns after creating indicators
+    df = df.drop(columns=warning_columns)
+
+    print("Warning-device columns created:")
+    print(df[list(device_mapping.keys())].sum())
+
+    return df
+
+
 def main():
     # load the data
     df = pd.read_csv("data/original_data.csv", low_memory=False)
@@ -233,10 +331,18 @@ def main():
     # audit_outcome_totals(df)
     df = add_outcome_variables(df=df)
     # audit_missingness(df=df)
+    # audit_categorical_features(df)
+    df = transform_warning_devices(df)
 
-    
+    # Consider adjusting filling missing data???
+    # Estimated vehicle speed 11.19% missing
+    # Warning Connected To Signal 10.59%
+
+    # we need to find a way to transform the crossing warning Expanded
 
     df.to_csv("data/pass_1.csv", index=False)
+
+    print(df.shape)
 
 
 if __name__ == "__main__":
