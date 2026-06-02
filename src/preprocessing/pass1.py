@@ -63,7 +63,7 @@ kept_features = [
 
 def main_reduction(df) -> pd:
     """
-    This function reduces the 154 features into 51. Essentially getting rid of all the crap that I define to be useless.
+    This function reduces the 154 features into #. Essentially getting rid of all the crap that I define to be useless.
     """
 
     # Confirm that every chosen feature exists in the original dataset
@@ -379,11 +379,12 @@ def audit_numeric_features(df):
     total_rows = len(df)
 
     for feature in numeric_features:
-        # Treat blank strings as missing, then force numeric conversion
+        # fix empty strings/white spaces
         original_values = df[feature].replace(r"^\s*$", pd.NA, regex=True)
+        # convert to numbers
         numeric_values = pd.to_numeric(original_values, errors="coerce")
 
-        # Values that were present but could not be converted to numbers
+        # values that were present but could not be converted to numbers
         invalid_numeric_count = (
             original_values.notna() & numeric_values.isna()
         ).sum()
@@ -398,8 +399,8 @@ def audit_numeric_features(df):
         upper_bound = q3 + (1.5 * iqr)
 
         outlier_count = (
-            (non_missing_values < lower_bound) |
-            (non_missing_values > upper_bound)
+            (non_missing_values > upper_bound) |
+            (non_missing_values < lower_bound)
         ).sum()
 
         audit_rows.append({
@@ -428,9 +429,313 @@ def audit_numeric_features(df):
         index=False
     )
 
-    print("Saved: data/numeric_feature_audit.csv")
+    # print("Saved: data/numeric_feature_audit.csv")
 
     return numeric_audit_df
+
+
+def inspect_numeric_extremes(df):
+    numeric_features = [
+        "Train Speed",
+        "Estimated Vehicle Speed",
+        "Number Vehicle Occupants",
+        "Number of Cars",
+        "Temperature"
+    ]
+
+    audit_rows = []
+
+    for feature in numeric_features:
+        numeric_values = pd.to_numeric(df[feature], errors="coerce")
+
+        value_counts = numeric_values.value_counts(dropna=False).reset_index()
+        value_counts.columns = ["Value", "Count"]
+
+        value_counts = value_counts.sort_values("Value", ascending=False)
+
+        for _, row in value_counts.iterrows():
+            audit_rows.append({
+                "Feature": feature,
+                "Value": row["Value"],
+                "Count": row["Count"]
+            })
+
+    extremes_df = pd.DataFrame(audit_rows)
+
+    extremes_df.to_csv(
+        "data/numeric_value_frequency_audit.csv",
+        index=False
+    )
+
+    # Separately inspect raw non-numeric Vehicle Damage Cost values
+    damage_raw = df["Vehicle Damage Cost"].replace(r"^\s*$", pd.NA, regex=True)
+    damage_numeric = pd.to_numeric(damage_raw, errors="coerce")
+
+    invalid_damage = damage_raw[
+        damage_raw.notna() & damage_numeric.isna()
+    ].value_counts().reset_index()
+
+    invalid_damage.columns = ["Raw Vehicle Damage Cost Value", "Count"]
+
+    invalid_damage.to_csv(
+        "data/invalid_vehicle_damage_values.csv",
+        index=False
+    )
+
+    # print("Saved: data/numeric_value_frequency_audit.csv")
+    # print("Saved: data/invalid_vehicle_damage_values.csv")
+
+
+def clean_numeric_features(df):
+    df = df.copy()
+
+    # the list that will hold the cleaned version for the summary
+    cleaning_rows = []
+
+    # convert vehicle damage column to string
+    damage_raw = df["Vehicle Damage Cost"].astype("string")
+
+    # clean up the commas, empty spaces, and strip white spaces
+    damage_cleaned = (
+        damage_raw
+        .str.replace(",", "", regex=False)
+        .str.replace("$", "", regex=False)
+        .str.strip()
+    )
+
+    # after cleaning, convert to numeric values
+    damage_numeric = pd.to_numeric(damage_cleaned, errors="coerce")
+
+    # add the info to the dict list
+    cleaning_rows.append({
+        "Feature": "Vehicle Damage Cost",
+        "Cleaning Rule": "Removed commas/dollar signs and converted to numeric",
+        "Values Affected": (
+            damage_raw.notna() & (damage_raw != damage_cleaned)
+        ).sum()
+    })
+
+    # replace with the cleaned version
+    df["Vehicle Damage Cost"] = damage_numeric
+
+    # other numeric features that require some cleaning
+    numeric_features = [
+        "Train Speed",
+        "Estimated Vehicle Speed",
+        "Number Vehicle Occupants",
+        "Number of Cars",
+        "Temperature"
+    ]
+
+    # convert the values in the feature columns to numbers of NaN
+    for feature in numeric_features:
+        df[feature] = pd.to_numeric(df[feature], errors="coerce")
+
+    cleaning_rules = {
+        "Train Speed": {
+            "condition": df["Train Speed"] > 110,
+            "rule": "Values greater than 110 mph set to missing"
+        },
+        "Estimated Vehicle Speed": {
+            "condition": df["Estimated Vehicle Speed"] > 120,
+            "rule": "Values greater than 120 mph set to missing"
+        },
+        "Number of Cars": {
+            "condition": df["Number of Cars"] > 300,
+            "rule": "Values greater than 300 set to missing"
+        },
+        "Temperature": {
+            "condition": (df["Temperature"] < -80) | (df["Temperature"] > 130),
+            "rule": "Values below -80 or above 130 set to missing"
+        }
+    }
+
+    for feature, rule_info in cleaning_rules.items():
+        # count the number of true values in the series in the condition
+        affected_count = rule_info["condition"].sum()
+
+        # take the actual df and change rows where the condition is met in ceratin columns
+        df.loc[rule_info["condition"], feature] = pd.NA
+
+        # add it to the list dict for summary
+        cleaning_rows.append({
+            "Feature": feature,
+            "Cleaning Rule": rule_info["rule"],
+            "Values Affected": affected_count
+        })
+
+    # convert that list of dicts to a dataframe
+    # cleaning_summary_df = pd.DataFrame(cleaning_rows)
+
+    # cleaning_summary_df.to_csv(
+    #     "data/numeric_cleaning_summary.csv",
+    #     index=False
+    # )
+
+    # print("Numeric cleaning complete.")
+    # print(cleaning_summary_df.to_string(index=False))
+
+    return df
+
+
+def create_final_feature_decision_table(df):
+    decision_rows = []
+
+    def add_decision(feature, clustering, association, transform, remove, reason):
+        if feature in df.columns:
+            decision_rows.append({
+                "Feature": feature,
+                "Keep for Clustering": clustering,
+                "Keep for Association Rules": association,
+                "Transform": transform,
+                "Remove from Modeling": remove,
+                "Reason": reason
+            })
+
+    # ---------- Audit-only fields ----------
+    add_decision(
+        "Report Key", "No", "No", "No", "Yes",
+        "Identifier retained for auditing only; not a modeling feature."
+    )
+
+    add_decision(
+        "Date", "No", "No", "No", "Yes",
+        "Exact date retained for auditing; broader time variables are used for modeling."
+    )
+
+    add_decision(
+        "year", "No", "No", "No", "Yes",
+        "Retained to check reporting-era effects; excluded from Version 1 model inputs."
+    )
+
+    # ---------- Derived time fields ----------
+    for feature in ["season", "time_of_day"]:
+        add_decision(
+            feature, "Yes", "Yes", "Already Transformed", "No",
+            "Derived interpretable time category suitable for both tasks."
+        )
+
+    # ---------- Numeric context features ----------
+    numeric_context_features = [
+        "Train Speed",
+        "Estimated Vehicle Speed",
+        "Number Vehicle Occupants",
+        "Number of Cars",
+        "Temperature"
+    ]
+
+    for feature in numeric_context_features:
+        add_decision(
+            feature, "Yes", "Yes", "Yes", "No",
+            "Keep continuous for clustering; convert to meaningful bins for association rules."
+        )
+
+    # ---------- Readable categorical context fields ----------
+    categorical_context_features = [
+        "Highway User",
+        "Highway User Position",
+        "Equipment Involved",
+        "Equipment Struck",
+        "Equipment Type",
+        "Track Type",
+        "Warning Connected To Signal",
+        "Crossing Illuminated",
+        "Visibility",
+        "Weather Condition",
+        "View Obstruction",
+        "Highway User Action",
+        "Driver Passed Vehicle",
+        "Driver In Vehicle"
+    ]
+
+    for feature in categorical_context_features:
+        add_decision(
+            feature, "Yes", "Yes", "No", "No",
+            "Readable incident-context category retained for both tasks."
+        )
+
+    # ---------- Transformed warning-device indicators ----------
+    warning_device_features = [
+        "has_gate",
+        "has_cantilever_fls",
+        "has_standard_fls",
+        "has_wig_wags",
+        "has_highway_traffic_signals",
+        "has_audible",
+        "has_crossbucks",
+        "has_stop_signs",
+        "has_watchman",
+        "has_flagged_by_crew",
+        "has_other_warning",
+        "has_no_warning_device"
+    ]
+
+    for feature in warning_device_features:
+        add_decision(
+            feature, "Yes", "Yes", "Already Transformed", "No",
+            "Binary warning-device indicator created from the original multi-field warning columns."
+        )
+
+    # ---------- Outcome-source and validation fields ----------
+    outcome_source_features = [
+        "Crossing Users Killed",
+        "Crossing Users Injured",
+        "Employees Killed",
+        "Employees Injured",
+        "Passengers Killed",
+        "Passengers Injured",
+        "Total Killed Form 57",
+        "Total Injured Form 57",
+        "Total Killed Form 55A",
+        "Total Injured Form 55A"
+    ]
+
+    for feature in outcome_source_features:
+        add_decision(
+            feature, "No", "No", "No", "Yes",
+            "Outcome-source or validation field; excluded to prevent outcome leakage."
+        )
+
+    # ---------- Binary association outcomes ----------
+    add_decision(
+        "fatality_present", "No", "Yes - Outcome Only", "Already Transformed", "No",
+        "Binary fatality outcome used only as an association-rule consequence."
+    )
+
+    add_decision(
+        "injury_present", "No", "Yes - Outcome Only", "Already Transformed", "No",
+        "Binary injury outcome used only as an association-rule consequence."
+    )
+
+    # ---------- Supporting/descriptive field ----------
+    add_decision(
+        "Vehicle Damage Cost", "No", "No", "Cleaned Only", "Yes",
+        "Cleaned and retained for description, but excluded from Version 1 modeling because dollar values are not inflation-adjusted."
+    )
+
+    decision_df = pd.DataFrame(decision_rows)
+
+    # Check whether any current columns were accidentally left undecided
+    decided_features = set(decision_df["Feature"])
+    undecided_features = [
+        feature for feature in df.columns
+        if feature not in decided_features
+    ]
+
+    if undecided_features:
+        print("Warning: the following features do not have a decision:")
+        print(undecided_features)
+    else:
+        print("Every feature in the cleaned dataset has a modeling decision.")
+
+    decision_df.to_csv(
+        "data/final_feature_decision_table.csv",
+        index=False
+    )
+
+    print("Saved: data/final_feature_decision_table.csv")
+
+    return decision_df
 
 
 def main():
@@ -438,7 +743,7 @@ def main():
     df = pd.read_csv("data/original_data.csv", low_memory=False)
     print(f"Size of dataframe after: loading; {df.shape}")
 
-    # functions that reduces the data 154 to 47 and remove duplicates
+    
     df = main_reduction(df)
     print(f"Size of dataframe after: initial pass; {df.shape}")
     df = remove_duplicates(df)
@@ -452,15 +757,14 @@ def main():
     print(f"Size of dataframe after: transforming warning devices; {df.shape}")
     df = transform_time_variables(df)
     print(f"Size of dataframe after: transfoming time variables; {df.shape}")
-    audit_numeric_features(df)
+    # audit_numeric_features(df)
+    # inspect_numeric_extremes(df)
+    df = clean_numeric_features(df)
+    print(f"Size of dataframe after: cleaning numeric features; {df.shape}")
 
-    # Consider adjusting filling missing data???
-    # Estimated vehicle speed 11.19% missing
-    # Warning Connected To Signal 10.59%
+    create_final_feature_decision_table(df)
 
-    # we need to find a way to transform the crossing warning Expanded
-
-    df.to_csv("data/pass_1.csv", index=False)
+    df.to_csv("data/v1.csv", index=False)
 
 
 if __name__ == "__main__":

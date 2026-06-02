@@ -27,3 +27,11 @@ I submitted my notes and so far the features.md file to have an ultimate best id
 Ok I initially thought that I neede to first find the more recent methods after settling on KMedoids and Apriori. But I was again deviated in my thought process that it was better to do that initial pass in the EDA process to see what the true structure of the data is.
 
 Pass1 data refining: reduce to 51 columns, remove duplicates, ensure that the deaths in the data set will be meaningful enough to produce reasonable results. After running the audit function inside the pass1 file, we have determined that the values from 55A and 57 agree over 98% of the time, no need for additional changes. Also 8.3% of the data has a more than 0 fatalities and 23.4% of the data has injuries, this shows that clustering and association is possible, right?
+
+Alot of reducing later... looks like we are at the end of the initial pass. Chat was doing the heavy lifting here. So many things and syntax that wouldve took weeks without chat. The goal is to practice alot of this over the summer.
+
+In the end we have cleaned up missing values, dealt with outliers, categorized categories, etc. This initial `pass_1.csv` is a baseline that we can then specifically refine for clustering and association modeling. I plan on running some initial basic clustering and association mining to see what type of useful patterns emerge from what is in the nice clean set before further refining for task specific methods.
+
+### Recent models
+
+After running some baseline test we will dive into finding some recent methods to compare against our baseline methods. Time to do some digging.

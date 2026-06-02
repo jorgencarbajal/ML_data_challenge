@@ -1,6 +1,6 @@
 ## Personal Interpretation
 
-Ok, so the idea is to perform two of the major tasks we have seen in class. The two that capture my attention a bit are **clustering** and **association rule mining**. I gravitate toward those initially because I can infer that there may be some meaningful patterns within this dataset. For example, certain features may frequently occur together in similar incidents, or the data may naturally separate into groups of incidents with similar characteristics. These patterns would show an association, not necessarily that a certain set of features leads to a specific outcome.
+The idea is to perform two of the major tasks we have seen in class. The two that capture my attention a bit are **clustering** and **association rule mining**. I gravitate toward those initially because I can infer that there may be some meaningful patterns within this dataset. For example, certain features may frequently occur together in similar incidents, or the data may naturally separate into groups of incidents with similar characteristics. These patterns would show an association, not necessarily that a certain set of features leads to a specific outcome.
 
 After picking the two major tasks, for each task I will pick two different techniques. For each of those techniques, I will have to measure at least two appropriate measures of success or goodness. For example, if I were comparing `SpectralClustering` and `KMeans` clustering, I could use the silhouette coefficient and maybe one other appropriate clustering measure.
 
