@@ -1,6 +1,34 @@
-# Critical Thinking / Crutch > 1 ?
+# Report: What are we answering?
 
-This md file will be for mapping my thought process and the assistance I am seeking of chat to see how much critical thinking I am doing vs chat.
+Clustering question to consider: 
+
+- Does the incident dataset contain stable and interpretable natural groupings, and does a density-based method confirm or challenge the groups produced by a partitioning method?
+- **Main question:** Do highway–rail crossing incidents form stable and interpretable groups based on incident characteristics alone?
+- **K-medoids:** When every incident is forced into one of a fixed number of clusters, what incident profiles emerge? (specific question answered by kmedoids)
+- Are the **K-medoids** profiles stable across repeated representative samples?
+- **HDBSCAN:** If incidents are not forced into clusters, does HDBSCAN discover similar dense incident profiles?
+- How much of the dataset does **HDBSCAN** consider clusterable versus ambiguous or noisy? (specific to the value of HDBSCAN)
+- Comparison Question: Do **K-medoids** and **HDBSCAN** identify the same broad incident profiles?
+- Does **HDBSCAN** provide a better description of weak cluster structure than **K-medoids**?
+- Evaluation: Which method produces more stable and interpretable clustering under repeated sampling?
+
+Classification questions to consider:
+
+- Does the incident dataset contain enough predictive information to identify injury-related incidents using recorded incident characteristics, while excluding direct outcome leakage?
+- **Main question:** Can highway–rail crossing incident characteristics be used to classify whether at least one reported injury occurred?
+- **Target variable:** `injury_present`
+- **Leakage control:** Can injury occurrence be predicted using only incident-context predictors, without including injury totals, fatality outcomes, identifiers, or other post-outcome severity information?
+- **Decision Tree:** What interpretable decision patterns emerge when a classical tree-based classifier is used to predict `injury_present`?
+- Does the **Decision Tree** perform meaningfully better than the majority-class / no-skill baseline?
+- Does the **Decision Tree** remain interpretable without becoming overly complex or overfitting the training data?
+- **TabNet:** Does a recent attention-based tabular neural-network model improve injury classification performance over the Decision Tree baseline?
+- Does **TabNet** identify useful feature relationships that a simpler Decision Tree may fail to capture?
+- Comparison Question: Do **Decision Tree** and **TabNet** identify similar incident characteristics as important for distinguishing injury-present from non-injury incidents?
+- Does the increased complexity of **TabNet** provide enough predictive improvement to justify reduced interpretability compared with the **Decision Tree**?
+- Class Imbalance Question: Since injury cases are less common than non-injury cases, does accuracy hide weaknesses in identifying the injury-positive class?
+- Evaluation: Which method produces better generalization on unseen incidents using precision, recall, F1 score, PR-AUC / average precision, and the confusion matrix?
+- Evaluation: How do training and testing results compare for each method, and does either model show signs of overfitting?
+- Interpretation Question: Which incident characteristics appear most influential in injury classification, and are those findings consistent across both methods?
 
 ## Setup
 
@@ -8,7 +36,7 @@ I started out by setting up the project folder, the only help in this was the sy
 
 Another part of the setup involved setting up the Latex template for the report. It would be very time consuming to sit and attempt to understand what every file in the template folder from the provided website was doing. Instead I had chat summarize what each was for and what was necessary to keep and discard.
 
-## Structure
+## Structure/approach
 
 After setting the environment we now had to plan out the structure of the project. This involved setting up a roadmap that will correctly hit all the targets I need. I initially missed the idea of setting up the questions that would lead to the goal of the project. What is the purpose. I am new to the world of machine learning so didn't really have that thinking cap on. I will continue to attempt to develop that critical thinking skill. 
 
@@ -32,13 +60,340 @@ Alot of reducing later... looks like we are at the end of the initial pass. Chat
 
 In the end we have cleaned up missing values, dealt with outliers, categorized categories, etc. This initial `pass_1.csv` is a baseline that we can then specifically refine for clustering and association modeling. I plan on running some initial basic clustering and association mining to see what type of useful patterns emerge from what is in the nice clean set before further refining for task specific methods.
 
-## Baseline testing
+### Chat Report
+
+#### Initial Data Refinement and Version 1 Cleaned Dataset
+
+##### Purpose
+
+The purpose of this stage was to reduce the original FRA Highway-Rail Grade Crossing Incident dataset into a smaller, cleaner working dataset before creating model-specific inputs.
+
+The raw dataset contained approximately **250,806 incidents** and **154 features**. The preprocessing goal was to preserve useful incident-context information, create usable injury/fatality outcomes, remove or transform problematic fields, and clearly separate modeling features from audit-only or outcome-related fields.
+
+---
+
+##### 1. Initial Feature Reduction
+
+The original dataset was first reduced from **154 features** to **51 candidate source fields**. The retained fields were selected because they were potentially useful for:
+
+* incident-context analysis;
+* later modeling tasks;
+* outcome construction;
+* auditing and validation.
+
+The candidate fields included timing information, highway-user and rail-equipment characteristics, warning-device fields, environmental conditions, driver/action fields, injury and fatality totals, and vehicle damage cost.
+
+After missingness and reporting-era audits, four fields were removed from the Version 1 source-field list:
+
+| Removed Feature                | Reason                                                             |
+| ------------------------------ | ------------------------------------------------------------------ |
+| `Crossing Warning Explanation` | Approximately 99.62% missing                                       |
+| `Roadway Condition`            | Approximately 87.28% missing and mostly unavailable before 2012    |
+| `User Age`                     | Approximately 72.04% missing and unavailable in many earlier years |
+| `Signaled Crossing Warning`    | Approximately 50.73% missing                                       |
+
+After these removals, Version 1 retained **47 original/source fields** before derived variables were added.
+
+---
+
+##### 2. Duplicate `Report Key` Audit
+
+`Report Key` was retained temporarily as an audit identifier to check for duplicated incident records.
+
+The audit found:
+
+| Result                                              | Count |
+| --------------------------------------------------- | ----: |
+| Rows associated with duplicated `Report Key` values |    47 |
+| Distinct duplicated-key groups                      |    23 |
+| Groups identical across retained fields             |    14 |
+| Groups with conflicting retained values             |     9 |
+
+Because some duplicated keys contained conflicting incident information, the duplicates could not be treated as exact copies in every case.
+
+For Version 1, the simplifying decision was to keep the first occurrence of each duplicated `Report Key` and remove later occurrences. This affected very few incidents relative to the full dataset and was treated as a practical cleaning choice rather than proof that every duplicate represented the same record.
+
+`Report Key` remains audit-only and should not be used as a modeling feature.
+
+---
+
+##### 3. Outcome Audit and Binary Outcome Creation
+
+Before creating outcome variables, the total injury and fatality fields from Form 55A and Form 57 were compared.
+
+The primary candidate outcome-source fields were:
+
+```text
+Total Killed Form 55A
+Total Injured Form 55A
+```
+
+The comparison fields were:
+
+```text
+Total Killed Form 57
+Total Injured Form 57
+```
+
+All four fields were fully populated. Agreement between the two form sources was also very high:
+
+| Comparison                                       | Agreement |
+| ------------------------------------------------ | --------: |
+| Form 55A killed total vs. Form 57 killed total   |    99.59% |
+| Form 55A injured total vs. Form 57 injured total |    98.25% |
+
+Based on this audit, the Form 55A totals were selected as the Version 1 outcome sources.
+
+Two binary outcome variables were created:
+
+```text
+fatality_present = 1 if Total Killed Form 55A > 0, otherwise 0
+injury_present   = 1 if Total Injured Form 55A > 0, otherwise 0
+```
+
+Outcome frequencies were:
+
+| Outcome            | Positive Incidents | Percent |
+| ------------------ | -----------------: | ------: |
+| `fatality_present` |             20,711 |   8.26% |
+| `injury_present`   |             68,617 |  27.36% |
+
+A combined severity variable was considered but not created. Injuries and fatalities were kept separate because they represent different outcomes and are easier to interpret independently.
+
+The original injury and fatality totals were retained in the cleaned working dataset for validation and interpretation, but they must be excluded from model predictors to prevent outcome leakage.
+
+---
+
+##### 4. Missingness and Reporting-Era Decisions
+
+Missingness was evaluated both overall and by year. This was important because some features were not simply missing at random; they were unavailable or inconsistently recorded during earlier reporting periods.
+
+The main decision was to build a consistent all-years Version 1 dataset rather than restrict the project to recent years just to keep a few incomplete variables.
+
+Fields such as `Roadway Condition` and `User Age` may still be useful in a later modern-era supporting analysis, but they were excluded from the broad Version 1 dataset.
+
+Several retained fields contain meaningful `Unknown` or missing categories, including:
+
+| Feature                       | Notable Uncertainty                            |
+| ----------------------------- | ---------------------------------------------- |
+| `Crossing Illuminated`        | Approximately 18.05% `Unknown`, 3.61% missing  |
+| `Warning Connected To Signal` | Approximately 14.28% `Unknown`, 10.59% missing |
+| `Driver Passed Vehicle`       | Approximately 7.85% `Unknown`, 2.28% missing   |
+
+These fields were retained because they still describe useful incident context. Unknown or missing responses were preserved rather than being forced into valid categories such as `Yes` or `No`.
+
+Rare categorical values were also retained during Version 1 preprocessing rather than being grouped prematurely.
+
+---
+
+##### 5. Warning-Device Transformation
+
+The dataset originally contained twelve fields:
+
+```text
+Crossing Warning Expanded 1
+...
+Crossing Warning Expanded 12
+```
+
+These fields represented multiple warning devices that could be selected for the same incident. Their column positions did not represent separate ordered meanings, so treating them as twelve ordinary categorical features would have been misleading.
+
+They were replaced with twelve binary indicator variables:
+
+```text
+has_gate
+has_cantilever_fls
+has_standard_fls
+has_wig_wags
+has_highway_traffic_signals
+has_audible
+has_crossbucks
+has_stop_signs
+has_watchman
+has_flagged_by_crew
+has_other_warning
+has_no_warning_device
+```
+
+Each indicator equals `1` when that warning-device type appears anywhere among the original twelve warning fields for an incident, and `0` otherwise.
+
+After this transformation, the original twelve expanded warning fields were removed. This preserved the warning-device information in a clearer and more usable format.
+
+---
+
+##### 6. Time Variable Transformation
+
+The original dataset included detailed time fields:
+
+```text
+Date
+Month
+Hour
+Time
+```
+
+These were transformed into broader, more interpretable variables:
+
+| Derived Feature | Purpose                                       |
+| --------------- | --------------------------------------------- |
+| `year`          | Retained for auditing reporting-era effects   |
+| `season`        | Provides a broader environmental/time context |
+| `time_of_day`   | Provides interpretable timing categories      |
+
+The derived categories were:
+
+```text
+season: Winter, Spring, Summer, Fall
+time_of_day: Night, Morning, Afternoon, Evening
+```
+
+After transformation:
+
+* `Month`, `Hour`, and `Time` were removed;
+* `Date` was retained for auditing only;
+* `year` was retained for reporting-era checks only;
+* `season` and `time_of_day` were retained as usable context features.
+
+`Date` and `year` should be excluded from model inputs because they could cause models to learn reporting periods rather than incident characteristics.
+
+---
+
+##### 7. Numeric Feature Audit and Cleaning
+
+The numeric audit focused on:
+
+```text
+Train Speed
+Estimated Vehicle Speed
+Number Vehicle Occupants
+Number of Cars
+Temperature
+Vehicle Damage Cost
+```
+
+The audit examined missingness, formatting problems, minimum and maximum values, extreme-value frequencies, and possible invalid measurements.
+
+###### Vehicle Damage Cost
+
+`Vehicle Damage Cost` initially appeared to contain many non-numeric values because numerous entries included commas or dollar-sign formatting.
+
+The field was cleaned by removing formatting characters and converting the values to numeric form. Approximately **139,307 values** required formatting cleanup.
+
+Although successfully cleaned, `Vehicle Damage Cost` was excluded from Version 1 modeling because:
+
+* it is partly an outcome of an incident rather than a pre-incident condition;
+* dollar amounts across many decades are not directly comparable without inflation adjustment.
+
+It was retained only for descriptive or future supporting analysis.
+
+###### Implausible Numeric Measurements
+
+Only clearly suspicious measurements were replaced with missing values:
+
+| Feature                   | Cleaning Rule              | Values Replaced |
+| ------------------------- | -------------------------- | --------------: |
+| `Train Speed`             | Greater than 110 mph       |               3 |
+| `Estimated Vehicle Speed` | Greater than 120 mph       |               7 |
+| `Number of Cars`          | Greater than 300           |               9 |
+| `Temperature`             | Below -80°F or above 130°F |              34 |
+
+In total, **53 suspicious numeric values** were replaced with missing values.
+
+No incident rows were removed during numeric cleaning. This preserved the usable context information from records that contained only one questionable numeric measurement.
+
+`Number Vehicle Occupants` was retained unchanged because unusually large values may still be valid for buses or other multi-passenger highway users.
+
+---
+
+##### 8. Final Feature-Use Decisions
+
+The cleaned dataset contains several categories of fields with different intended uses.
+
+###### Audit-Only Fields
+
+These fields remain in the working dataset but should not be used for modeling:
+
+```text
+Report Key
+Date
+year
+```
+
+###### Context Features Retained for Later Modeling
+
+The usable context feature set includes:
+
+* highway-user characteristics;
+* rail-equipment and track characteristics;
+* visibility, weather, and obstruction fields;
+* highway-user action and driver-context fields;
+* crossing illumination and signal-connection fields;
+* `season`;
+* `time_of_day`;
+* binary warning-device indicators;
+* cleaned numeric context fields such as train speed, estimated vehicle speed, number of occupants, number of cars, and temperature.
+
+###### Outcome-Related Fields
+
+The original injury and fatality totals and component fields were retained only for outcome construction, validation, or interpretation. They must not be included as predictors.
+
+The binary fields:
+
+```text
+fatality_present
+injury_present
+```
+
+can be used as outcome variables where appropriate, but they should not be included as ordinary incident-context inputs.
+
+###### Excluded Modeling Field
+
+```text
+Vehicle Damage Cost
+```
+
+was retained in the cleaned dataset but excluded from Version 1 modeling because it is outcome-like and not adjusted for inflation.
+
+---
+
+##### 9. Resulting Version 1 Dataset
+
+The preprocessing pipeline produced `v1.csv`, a cleaned working analysis dataset rather than a final model-ready dataset.
+
+Its structure is:
+
+| Stage                                                                                | Columns |
+| ------------------------------------------------------------------------------------ | ------: |
+| Original raw dataset                                                                 |     154 |
+| Initial retained source fields                                                       |      51 |
+| Retained source fields after missingness removals                                    |      47 |
+| After adding `fatality_present` and `injury_present`                                 |      49 |
+| After replacing twelve warning-device fields with twelve indicators                  |      49 |
+| After replacing `Month`, `Hour`, and `Time` with `year`, `season`, and `time_of_day` |      49 |
+
+Therefore, Version 1 contains **49 columns** and approximately **250,000 incident records**, with the final row count depending on application of the duplicate-removal decision.
+
+---
+
+##### Final Preprocessing Conclusion
+
+This stage created a defensible cleaned working dataset from the original FRA incident data. The main preprocessing decisions were:
+
+* reduce the raw feature space to useful context, audit, and outcome fields;
+* remove variables with severe missingness or strong reporting-era limitations;
+* audit and simplify duplicated incident identifiers;
+* verify Form 55A outcome totals and derive binary injury/fatality indicators;
+* convert warning-device slots into interpretable binary indicators;
+* summarize detailed time fields into broader categories;
+* clean formatting problems and replace only clearly suspicious numeric measurements;
+* preserve audit and outcome fields in the working dataset while explicitly excluding them from modeling inputs.
+
+The resulting `v1.csv` is ready to be used as the foundation for constructing task-specific model inputs.
+
+
+## Baseline methods and testing
 
 The goal here is to run a quick cluster and association rule mining on the v1 dataset to see how viable it is, lets try not to waste to much time.
-
-### Goodness measures?
-
-Goodness measures for Clustering: Silhouette; Cluster stability; Supporting evidence: cluster size, description of cluster, whether clusters differ meaningfully. For association: Lift; Confidence; Support, number of useful/nonredundant outcome rules. Be careful when choosing your recent comparison method. If Apriori and the newer method both simply find all rules above the same support/confidence thresholds, they may produce essentially the same rules, with the main difference being speed or memory use.
 
 ### K-medoids
 
@@ -593,6 +948,14 @@ Remaining items include:
 * Compare final clustering methods using consistent quality measures and interpretation procedures.
 
 The Version 1 baseline is therefore best viewed as a successful diagnostic and starting point for the final clustering comparison, not as the completed clustering portion of the project.
+
+### DecisionTree
+
+I originally planned to use association rule mining as one of my two major tasks. The goal was to identify combinations of incident characteristics associated with injury or fatality outcomes. However, as I worked through the setup and initial reasoning, it became clear that this task could produce many weak, repetitive, or difficult-to-interpret rules. Finding rules does not guarantee that the rules will reveal strong or useful patterns, especially in a complex real-world incident dataset.
+
+Rather than continuing down a path that may be difficult to evaluate and explain clearly, I decided to pivot to classification. Classification provides a more direct question: whether incident characteristics can be used to predict if an injury occurred. The cleaned `v1.csv` dataset is still usable because the contextual incident features already prepared for the earlier tasks can now serve as predictors, while `injury_present` becomes the target variable.
+
+For the first classification baseline, I chose a Decision Tree because it is a classical method covered in class, is straightforward to explain, and can provide interpretable decision rules. This pivot should create a clearer experimental pipeline with more direct evaluation measures such as precision, recall, F1 score, precision-recall AUC, and a confusion matrix.
 
 #### Classification Task: Predicting Whether a Recorded Incident Included an Injury
 
@@ -1268,4 +1631,6 @@ The selected Decision Tree can now serve as the classical classification method 
 After running some baseline test we will dive into finding some recent methods to compare against our baseline methods. Time to do some digging.
 
 ### HDBSCAN (cluster comparison)
+
+### TabNet
 

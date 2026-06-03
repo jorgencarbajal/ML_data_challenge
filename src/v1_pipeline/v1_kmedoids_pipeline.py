@@ -19,6 +19,10 @@ PAM_SAMPLE_SIZE = 2_000
 # Candidate cluster counts for the first diagnostic run.
 K_VALUES = range(2, 9)
 
+FINAL_PAM_K = 2
+
+STABILITY_SEEDS = [42, 101, 202, 303, 404]
+
 # Numeric features should remain numeric for K-medoids.
 NUMERIC_FEATURES = [
     "Train Speed",
@@ -772,6 +776,242 @@ def evaluate_k_values(
     return evaluation_df
 
 
+def summarize_aligned_profiles(
+    model_sample: pd.DataFrame,
+    cluster_labels: np.ndarray,
+    seed: int,
+) -> dict:
+    """
+    Align the two clusters by incident behavior rather than numeric label.
+
+    The cluster with the higher stopped/stalled behavior rate is labeled:
+        Stopped/Stalled + Active Warning Profile
+
+    The other cluster is labeled:
+        Moving-Over-Crossing Profile
+    """
+
+    clustered_df = model_sample.copy()
+    clustered_df["cluster"] = cluster_labels
+
+    clustered_df["stopped_or_stalled"] = (
+        (clustered_df["Highway User Action"] == "Stopped on crossing")
+        | (
+            clustered_df["Highway User Position"].isin(
+                ["Stopped on crossing", "Stalled or stuck on crossing"]
+            )
+        )
+    )
+
+    clustered_df["moving_over_crossing"] = (
+        clustered_df["Highway User Position"] == "Moving over crossing"
+    )
+
+    clustered_df["driver_in_vehicle_yes"] = (
+        clustered_df["Driver In Vehicle"] == "Yes"
+    )
+
+    clustered_df["rail_struck_highway_user"] = (
+        clustered_df["Equipment Struck"] == "Rail equipment struck highway user"
+    )
+
+    cluster_summary = (
+        clustered_df
+        .groupby("cluster")
+        .agg(
+            Cluster_Size=("cluster", "size"),
+            Stopped_Stalled_Rate=("stopped_or_stalled", "mean"),
+            Moving_Over_Rate=("moving_over_crossing", "mean"),
+            Driver_In_Vehicle_Rate=("driver_in_vehicle_yes", "mean"),
+            Rail_Struck_Highway_User_Rate=("rail_struck_highway_user", "mean"),
+            Gate_Rate=("has_gate", "mean"),
+            Flashing_Light_Rate=("has_standard_fls", "mean"),
+            Audible_Rate=("has_audible", "mean"),
+            Crossbucks_Rate=("has_crossbucks", "mean"),
+            Train_Speed_Median=("Train Speed", "median"),
+            Vehicle_Speed_Median=("Estimated Vehicle Speed", "median"),
+            Number_Cars_Median=("Number of Cars", "median"),
+        )
+    )
+
+    stopped_cluster = cluster_summary["Stopped_Stalled_Rate"].idxmax()
+    moving_cluster = [
+        cluster for cluster in cluster_summary.index
+        if cluster != stopped_cluster
+    ][0]
+
+    stopped = cluster_summary.loc[stopped_cluster]
+    moving = cluster_summary.loc[moving_cluster]
+
+    print(f"\nSeed {seed}: aligned profile comparison")
+    print(f"Stopped/stalled profile original cluster label: {stopped_cluster}")
+    print(f"Moving-over profile original cluster label: {moving_cluster}")
+
+    print(
+        cluster_summary
+        .mul(100)
+        .round(2)[
+            [
+                "Stopped_Stalled_Rate",
+                "Moving_Over_Rate",
+                "Driver_In_Vehicle_Rate",
+                "Gate_Rate",
+                "Flashing_Light_Rate",
+                "Audible_Rate",
+                "Crossbucks_Rate"
+            ]
+        ]
+    )
+
+    return {
+        "Seed": seed,
+        "Stopped/Stalled Cluster Label": stopped_cluster,
+        "Moving-Over Cluster Label": moving_cluster,
+        "Stopped Profile Size": int(stopped["Cluster_Size"]),
+        "Moving Profile Size": int(moving["Cluster_Size"]),
+        "Stopped Profile Stopped/Stalled Rate": stopped["Stopped_Stalled_Rate"],
+        "Moving Profile Stopped/Stalled Rate": moving["Stopped_Stalled_Rate"],
+        "Stopped Profile Gate Rate": stopped["Gate_Rate"],
+        "Moving Profile Gate Rate": moving["Gate_Rate"],
+        "Stopped Profile Audible Rate": stopped["Audible_Rate"],
+        "Moving Profile Audible Rate": moving["Audible_Rate"],
+        "Stopped Profile Flashing Light Rate": stopped["Flashing_Light_Rate"],
+        "Moving Profile Flashing Light Rate": moving["Flashing_Light_Rate"],
+        "Stopped Profile Crossbucks Rate": stopped["Crossbucks_Rate"],
+        "Moving Profile Crossbucks Rate": moving["Crossbucks_Rate"],
+        "Stopped Profile More Gates": stopped["Gate_Rate"] > moving["Gate_Rate"],
+        "Stopped Profile More Audible": stopped["Audible_Rate"] > moving["Audible_Rate"],
+        "Stopped Profile More Flashing Lights": (
+            stopped["Flashing_Light_Rate"] > moving["Flashing_Light_Rate"]
+        ),
+        "Moving Profile More Crossbucks": (
+            moving["Crossbucks_Rate"] > stopped["Crossbucks_Rate"]
+        ),
+        "Moving Profile More Moving-Over Behavior": (
+            moving["Moving_Over_Rate"] > stopped["Moving_Over_Rate"]
+        ),
+        "Moving Profile More Drivers In Vehicle": (
+            moving["Driver_In_Vehicle_Rate"] > stopped["Driver_In_Vehicle_Rate"]
+        )
+    }
+
+
+def run_initial_stability_metrics(
+    model_df: pd.DataFrame,
+    profile_df: pd.DataFrame,
+    seeds: list[int] = STABILITY_SEEDS,
+    sample_size: int = PAM_SAMPLE_SIZE,
+    k: int = FINAL_PAM_K,
+) -> pd.DataFrame:
+    """
+    Run the fixed final PAM baseline across several random samples.
+
+    This first stability step records only numerical clustering behavior.
+    It does not yet align or interpret cluster profiles across seeds.
+    """
+
+    stability_rows = []
+    aligned_profile_rows = []
+
+    for seed in seeds:
+        print(f"\n================ STABILITY RUN: SEED {seed} ================")
+
+        model_sample, profile_sample = create_pam_sample(
+            model_df=model_df,
+            profile_df=profile_df,
+            sample_size=sample_size,
+            random_seed=seed
+        )
+
+        distance_matrix = compute_distance_matrix(
+            model_sample=model_sample,
+            numeric_reference_df=model_df,
+            numeric_features=NUMERIC_FEATURES,
+            categorical_features=KMEDOIDS_CATEGORICAL_FEATURES,
+            binary_features=BINARY_FEATURES
+        )
+
+        cluster_labels, medoid_indices, total_cost = run_pam(
+            distance_matrix=distance_matrix,
+            k=k
+        )
+
+        aligned_profile_rows.append(
+            summarize_aligned_profiles(
+                model_sample=model_sample,
+                cluster_labels=cluster_labels,
+                seed=seed
+            )
+        )
+
+        silhouette = silhouette_score(
+            distance_matrix,
+            cluster_labels,
+            metric="precomputed"
+        )
+
+        # Sort sizes rather than relying on cluster labels.
+        # Cluster 0 in one run may represent Cluster 1 in another run.
+        sorted_sizes = (
+            pd.Series(cluster_labels)
+            .value_counts()
+            .sort_values(ascending=False)
+            .to_numpy()
+        )
+
+        sorted_proportions = sorted_sizes / len(cluster_labels)
+
+        stability_rows.append({
+            "Seed": seed,
+            "Sample Size": len(model_sample),
+            "k": k,
+            "Silhouette Score": silhouette,
+            "Total Cost": total_cost,
+            "Larger Cluster Size": sorted_sizes[0],
+            "Smaller Cluster Size": sorted_sizes[1],
+            "Larger Cluster Proportion": sorted_proportions[0],
+            "Smaller Cluster Proportion": sorted_proportions[1],
+            "Medoid Indices": medoid_indices.tolist()
+        })
+
+    stability_df = pd.DataFrame(stability_rows)
+
+    print("\n================ INITIAL STABILITY SUMMARY ================")
+    print(
+        stability_df[
+            [
+                "Seed",
+                "Sample Size",
+                "Silhouette Score",
+                "Total Cost",
+                "Larger Cluster Size",
+                "Smaller Cluster Size",
+                "Larger Cluster Proportion",
+                "Smaller Cluster Proportion"
+            ]
+        ].round(4).to_string(index=False)
+    )
+
+    aligned_profiles_df = pd.DataFrame(aligned_profile_rows)
+
+    print("\n================ PROFILE DIRECTION CONSISTENCY ================")
+    print(
+        aligned_profiles_df[
+            [
+                "Seed",
+                "Stopped Profile More Gates",
+                "Stopped Profile More Audible",
+                "Stopped Profile More Flashing Lights",
+                "Moving Profile More Crossbucks",
+                "Moving Profile More Moving-Over Behavior",
+                "Moving Profile More Drivers In Vehicle"
+            ]
+        ].to_string(index=False)
+    )
+
+    return stability_df
+
+
 def plot_k_evaluation(evaluation_df: pd.DataFrame) -> None:
     """
     Plot silhouette score and total PAM cost across candidate k values.
@@ -1094,27 +1334,9 @@ def main() -> None:
 
     model_df, profile_df, audit_df = prepare_kmedoids_data(df)
 
-    model_sample, profile_sample = create_pam_sample(
+    stability_df = run_initial_stability_metrics(
         model_df=model_df,
         profile_df=profile_df
-    )
-
-    # Final revised feature space:
-    # remove time_of_day from fitting, keep warning-device indicators.
-    distance_matrix = compute_distance_matrix(
-        model_sample=model_sample,
-        numeric_reference_df=model_df,
-        numeric_features=NUMERIC_FEATURES,
-        categorical_features=KMEDOIDS_CATEGORICAL_FEATURES,
-        binary_features=BINARY_FEATURES
-    )
-
-    # Final Version 1 PAM choice based on highest silhouette score.
-    final_profile = profile_clusters(
-        model_sample=model_sample,
-        profile_sample=profile_sample,
-        distance_matrix=distance_matrix,
-        k=2
     )
 
 
