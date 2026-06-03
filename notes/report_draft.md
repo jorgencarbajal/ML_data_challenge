@@ -1634,3 +1634,16 @@ After running some baseline test we will dive into finding some recent methods t
 
 ### TabNet
 
+## Evaluation
+
+### Decision Tree metrics
+
+- Average precision
+- F1 score
+
+### Clustering metrics
+
+- Gower-distance silhouette score
+- Cluster stability
+
+### Hyperparameter ranges
