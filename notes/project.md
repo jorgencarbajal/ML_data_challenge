@@ -1,30 +1,4 @@
-## Personal Interpretation
-
-The idea is to perform two of the major tasks we have seen in class. The two that capture my attention a bit are **clustering** and **association rule mining**. I gravitate toward those initially because I can infer that there may be some meaningful patterns within this dataset. For example, certain features may frequently occur together in similar incidents, or the data may naturally separate into groups of incidents with similar characteristics. These patterns would show an association, not necessarily that a certain set of features leads to a specific outcome.
-
-After picking the two major tasks, for each task I will pick two different techniques. For each of those techniques, I will have to measure at least two appropriate measures of success or goodness. For example, if I were comparing `SpectralClustering` and `KMeans` clustering, I could use the silhouette coefficient and maybe one other appropriate clustering measure.
-
-The techniques I choose should include one classical method from class or the textbook, while the other should be a more recently proposed technique. This will involve some digging and research to understand and successfully apply the newer technique to the dataset.
-
-I will also need to make sure I can describe my solution well, including any fine-tuning that needed to be done. I should thoroughly compare my chosen methods against relevant established or recent methods from the literature. If my solution contains different components, I should perform an ablation study to compare the effect of each component in the process. When choosing hyperparameter's, I should also show how the methods behave across reasonable settings. Finally, the report should include enough description of my process that someone else could reasonably recreate the solution.
-
-## Post Chat Interpretation
-
-Research style experiment
-1. Define two meaningful data mining questions
-2. Choose one classical and on recent technique for each question.
-3. Build appropriate preprocessing pipelines
-4. Tune and evaluate the techniques fairly
-5. Explain why your choice were justified.
-6. Report enough detail that another person could recreate your work.
-
-Clustering  
-- What meaningful types of highway-rail incidents exist?
-
-Association rule mining
-- What combinations of incident conditions are strongly associated with severe outcomes or other meaningful event categories?
-
-## Roadmap
+# Roadmap
 
 Alright now that we got all the understanding out of the way, I want to attempt to create a roadmap for this project so I can start executing. I will attempt to create it on my own and then we can redefine what I should actually do and in what order. This will be very broad, later we can get into the details of each pipeline.
 

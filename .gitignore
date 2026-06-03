@@ -1,8 +1,9 @@
 # Virtual environment
 .venv/
 
-# Raw/local dataset files and notes
+# data and trash
 data/
+trash/
 
 # Python generated files
 __pycache__/
