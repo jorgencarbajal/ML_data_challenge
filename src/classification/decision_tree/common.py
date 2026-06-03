@@ -1,3 +1,7 @@
+"""
+This is a shared helper function file that helps define common functions that will be used throughout the folder. It defines constants, random seeds, hyperparameters, etc. It also contains reusable functions that help load dataset, exclude columns, choosing the predictors, grouping features, splitting data, building the decision tree model, etc.  
+"""
+
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +25,7 @@ TREE_MAX_DEPTH = 8
 TREE_MIN_SAMPLES_LEAF = 100
 
 
+# columns that we will exclude
 EXCLUDED_COLUMNS = {
     "target": [
         "injury_present",
