@@ -1,3 +1,50 @@
+# ML Data Challenge
+
+This repository contains a self-contained Jupyter notebook for the FRA highway-rail grade crossing incident data challenge.
+
+## How to Run
+
+Place the raw CSV file in the `data` folder with this filename:
+
+```text
+data/Highway-Rail_Grade_Crossing_Incident_Data_(Form_57)_20260603.csv
+```
+
+Then open and run:
+
+```text
+data_challenge.ipynb
+```
+
+The notebook is self-contained. It loads the raw CSV, rebuilds the cleaned working dataset, trains/evaluates the classification methods, runs the clustering methods, and creates the report figures.
+
+Expected runtime:
+
+- Decision Tree is quick.
+- TabNet trains on CPU and may take a few minutes.
+- Clustering builds a 2,000 by 2,000 distance matrix and may also take a few minutes.
+
+Generated figures are saved in:
+
+```text
+figures/
+```
+
+For the cleanest rerun, restart the notebook kernel and run all cells from the top.
+
+## Project Structure
+
+```text
+data_challenge.ipynb        Self-contained final notebook
+data/                       Raw data and generated/intermediate data files
+figures/                    Notebook-generated report figures
+notes/report_v1.md          Detailed working report source
+notes/current_status.md     Current project checkpoint
+src/                        Script-based development pipelines
+```
+
+The `src` folder contains the script-based pipelines used during development. The notebook is the main reproducible deliverable and does not require loading saved model-result artifacts.
+
 # Report V1 Working Source
 
 This file is a detailed working source document for the final data challenge report and notebook. It is not meant to be pasted directly as the final 4-page ACM SIGKDD-style report. The final report should be a compressed version of this document, written in the student's own final wording, with verified references and only the strongest tables/figures.
@@ -59,7 +106,7 @@ Limitation to include:
 
 Status: this needs careful handling.
 
-The current executable Decision Tree and TabNet pipelines use train/validation/test splitting, not full k-fold cross-validation for the final reported test metrics. The older `notes/report_draft.md` includes a 3-fold stratified cross-validation comparison for Decision Tree tuning, but the current staged Decision Tree artifact is based on a newer train/validation/test threshold pipeline.
+The current notebook and executable Decision Tree/TabNet pipelines use train/validation/test splitting, not full k-fold cross-validation for the final reported test metrics. The older `notes/report_draft.md` includes a 3-fold stratified cross-validation comparison for Decision Tree tuning, but the current final notebook reports the newer train/validation/test threshold pipeline.
 
 Do not falsely claim that every final model was evaluated by k-fold cross-validation unless that code is actually run and saved.
 
@@ -83,13 +130,13 @@ The code now covers:
 - Data cleaning and feature construction.
 - Clustering baseline and comparison.
 - Classification baseline and comparison.
-- Saved metric artifacts.
+- Self-contained notebook execution from the raw data file.
 - Current status notes.
 
 Remaining work:
 
-- Build final notebook from saved artifacts.
-- Add selected plots/tables.
+- Read and polish the final notebook.
+- Use selected notebook plots/tables in the report.
 - Read/comment through code.
 - Condense this file into a final 4-page report.
 
@@ -783,7 +830,7 @@ Current final staged Decision Tree settings:
 
 Important note:
 
-The older draft includes a previous class-weighted Decision Tree run with different seed and different results. The current final artifact in `data/decision_tree_baseline_results.json` uses the staged train/validation/test threshold pipeline. Do not mix the old weighted-tree results with the current final comparison table unless clearly labeling them as historical sensitivity experiments.
+The older draft includes a previous class-weighted Decision Tree run with different seed and different results. The current final notebook uses the train/validation/test threshold pipeline with an unweighted depth-8 Decision Tree. Do not mix the old weighted-tree results with the current final comparison table unless clearly labeling them as historical sensitivity experiments.
 
 ### Decision Tree Preprocessing
 
