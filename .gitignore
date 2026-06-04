@@ -1,9 +1,11 @@
 # Virtual environment
 .venv/
 
-# data and trash
+# data / trash / figures / notes
+notes/
 data/
 trash/
+figures/
 
 # Python generated files
 __pycache__/

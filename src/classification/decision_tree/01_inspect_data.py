@@ -1,12 +1,13 @@
 """
-
+This is the first part of the pipeline. The goal with this file is to bring in the data and build an overall understanding of what we are working with. The data has already undergone a preprocessing pass, this is more specific to the clustering task.
 """
 
+# imports
 from pathlib import Path
-
 import pandas as pd
 
 
+# global constants
 DATA_PATH = Path("data/v1.csv")
 TARGET = "injury_present"
 ID_COLUMNS = ["Report Key"]
@@ -24,18 +25,16 @@ def format_percent(value: float) -> str:
 
 def load_data(path: Path) -> pd.DataFrame:
     if not path.exists():
-        raise FileNotFoundError(f"Dataset not found: {path}")
+        raise FileNotFoundError(f"{path} not found")
 
-    df = pd.read_csv(path, low_memory=False)
-    print_section("DATASET LOADED")
-    print(f"Path: {path}")
-    print(f"Rows: {len(df):,}")
-    print(f"Columns: {len(df.columns):,}")
-    print(f"Memory usage: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
-    return df
+    df = pd.DataFrame(path, index=False)
 
 
 def validate_target(df: pd.DataFrame) -> None:
+    """
+    Confirm that the target column is usable. Check existence, how many missing values we have, ensures only {0,1}, etc.
+    """
+    
     print_section("TARGET CHECK")
 
     if TARGET not in df.columns:
@@ -71,6 +70,10 @@ def validate_target(df: pd.DataFrame) -> None:
 
 
 def inspect_columns(df: pd.DataFrame) -> None:
+    """
+    create an audit table for all the columns in the dataset
+    """
+    
     print_section("COLUMN AUDIT")
 
     audit = pd.DataFrame({
@@ -91,6 +94,10 @@ def inspect_columns(df: pd.DataFrame) -> None:
 
 
 def inspect_identifiers(df: pd.DataFrame) -> None:
+    """
+    Check to ensure the data is unique and has no duplicates.
+    """
+
     print_section("IDENTIFIER CHECK")
 
     for column in ID_COLUMNS:
@@ -106,6 +113,10 @@ def inspect_identifiers(df: pd.DataFrame) -> None:
 
 
 def group_name_based_leakage_candidates(df: pd.DataFrame) -> None:
+    """
+    
+    """
+
     print_section("NAME-BASED LEAKAGE CANDIDATES")
 
     leakage_keywords_by_reason = {

@@ -2,7 +2,6 @@ import pandas as pd
 
 from common import (
     DATA_PATH,
-    EXCLUSION_NOTES,
     TARGET,
     get_excluded_columns,
     get_feature_groups,
@@ -30,25 +29,19 @@ def print_target_summary(df: pd.DataFrame) -> None:
 
 def print_excluded_columns(
     df: pd.DataFrame,
-    excluded_by_reason: dict[str, list[str]],
+    excluded_columns: list[str],
 ) -> None:
     print_section("EXCLUDED COLUMNS")
 
-    total_excluded = sum(len(columns) for columns in excluded_by_reason.values())
-    print(f"Total excluded columns: {total_excluded}")
+    print(f"Total excluded columns: {len(excluded_columns)}")
 
-    for reason, columns in excluded_by_reason.items():
-        print(f"\n{reason}: {len(columns)} column(s)")
-        for column in columns:
-            missing = df[column].isna().sum()
-            unique = df[column].nunique(dropna=True)
-            print(
-                f"  - {column} "
-                f"(dtype={df[column].dtype}, missing={missing:,}, unique={unique:,})"
-            )
-
-            if column in EXCLUSION_NOTES:
-                print(f"    note: {EXCLUSION_NOTES[column]}")
+    for column in excluded_columns:
+        missing = df[column].isna().sum()
+        unique = df[column].nunique(dropna=True)
+        print(
+            f"  - {column} "
+            f"(dtype={df[column].dtype}, missing={missing:,}, unique={unique:,})"
+        )
 
 
 def print_included_columns(
@@ -76,15 +69,9 @@ def print_included_columns(
 def validate_feature_selection(
     df: pd.DataFrame,
     included_columns: list[str],
-    excluded_by_reason: dict[str, list[str]],
+    excluded_columns: list[str],
 ) -> None:
     print_section("FEATURE SELECTION CHECKS")
-
-    excluded_columns = [
-        column
-        for columns in excluded_by_reason.values()
-        for column in columns
-    ]
 
     overlap = sorted(set(included_columns).intersection(excluded_columns))
     if overlap:
@@ -112,12 +99,12 @@ def main() -> None:
     print_target_summary(df)
 
     included_columns = get_predictor_columns(df)
-    excluded_by_reason = get_excluded_columns(df)
+    excluded_columns = get_excluded_columns(df)
     feature_types = get_feature_groups(df, included_columns)
 
-    print_excluded_columns(df, excluded_by_reason)
+    print_excluded_columns(df, excluded_columns)
     print_included_columns(df, included_columns, feature_types)
-    validate_feature_selection(df, included_columns, excluded_by_reason)
+    validate_feature_selection(df, included_columns, excluded_columns)
 
 
 if __name__ == "__main__":

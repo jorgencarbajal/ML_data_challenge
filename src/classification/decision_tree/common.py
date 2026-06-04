@@ -21,47 +21,30 @@ TARGET = "injury_present"
 RANDOM_SEED = 13
 TEST_SIZE = 0.20
 VALIDATION_SIZE = 0.20
+# tree hyperparameters
 TREE_MAX_DEPTH = 8
 TREE_MIN_SAMPLES_LEAF = 100
 
 
 # columns that we will exclude
-EXCLUDED_COLUMNS = {
-    "target": [
-        "injury_present",
-    ],
-    "identifier": [
-        "Report Key",
-    ],
-    "date or reporting period": [
-        "Date",
-        "year",
-    ],
-    "injury or fatality outcome": [
-        "Crossing Users Injured",
-        "Crossing Users Killed",
-        "Employees Injured",
-        "Employees Killed",
-        "Passengers Injured",
-        "Passengers Killed",
-        "Total Injured Form 55A",
-        "Total Injured Form 57",
-        "Total Killed Form 55A",
-        "Total Killed Form 57",
-        "fatality_present",
-    ],
-    "post-incident consequence": [
-        "Vehicle Damage Cost",
-    ],
-}
-
-
-EXCLUSION_NOTES = {
-    "Date": "Exact date is too specific and can encode reporting artifacts.",
-    "year": "Kept for audit only, not as a baseline model input.",
-    "fatality_present": "This is another outcome variable.",
-    "Vehicle Damage Cost": "Damage cost happens after the incident.",
-}
+EXCLUDED_COLUMNS = [
+    "injury_present",
+    "Report Key",
+    "Date",
+    "year",
+    "Crossing Users Injured",
+    "Crossing Users Killed",
+    "Employees Injured",
+    "Employees Killed",
+    "Passengers Injured",
+    "Passengers Killed",
+    "Total Injured Form 55A",
+    "Total Injured Form 57",
+    "Total Killed Form 55A",
+    "Total Killed Form 57",
+    "fatality_present",
+    "Vehicle Damage Cost",
+]
 
 
 def print_section(title: str) -> None:
@@ -77,28 +60,34 @@ def load_data() -> pd.DataFrame:
     return pd.read_csv(DATA_PATH, low_memory=False)
 
 
-def get_excluded_columns(df: pd.DataFrame) -> dict[str, list[str]]:
-    excluded = {
-        reason: [column for column in columns if column in df.columns]
-        for reason, columns in EXCLUDED_COLUMNS.items()
-    }
+def get_excluded_columns(df: pd.DataFrame) -> list[str]:
+    """
+    Returns the excluded columns and the constant columns (columns with one value). 
+    """
+
+    excluded = []
+    for column in EXCLUDED_COLUMNS:
+        if column in df.columns and column not in excluded:
+            excluded.append(column)
+
+    excluded_set = set(excluded)
 
     constant_columns = [
         column for column in df.columns
         if column != TARGET
-        and column not in {item for columns in excluded.values() for item in columns}
+        and column not in excluded_set
         and df[column].nunique(dropna=True) <= 1
     ]
 
-    if constant_columns:
-        excluded["constant column"] = constant_columns
-
-    return excluded
+    return excluded + constant_columns
 
 
 def get_predictor_columns(df: pd.DataFrame) -> list[str]:
-    excluded = get_excluded_columns(df)
-    excluded_columns = {column for columns in excluded.values() for column in columns}
+    """
+    Use the excluded columns to filter for columsn that will be used as features. Return the allowed feature columns. The goal it to make sure we dont have any leakage.
+    """
+
+    excluded_columns = set(get_excluded_columns(df))
     predictors = [column for column in df.columns if column not in excluded_columns]
 
     if TARGET in predictors:
@@ -116,10 +105,11 @@ def get_predictor_columns(df: pd.DataFrame) -> list[str]:
     return predictors
 
 
-def get_feature_groups(
-    df: pd.DataFrame,
-    predictors: list[str],
-) -> dict[str, list[str]]:
+def get_feature_groups(df: pd.DataFrame, predictors: list[str]) -> dict[str, list[str]]:
+    """
+    This separates the feature columns into groups and returns the groupings as a dictionary.
+    """
+
     groups = {"numeric": [], "categorical": [], "binary": []}
 
     for column in predictors:
@@ -135,10 +125,11 @@ def get_feature_groups(
     return groups
 
 
-def make_splits(
-    X: pd.DataFrame,
-    y: pd.Series,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]:
+def make_splits(X: pd.DataFrame, y: pd.Series) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]:
+    """
+    We split the data into 3 sub categories. X_train, y_train for training. X_val, y_val is a set to help find the threshold that best works with the model. X_test, y_test is the testing set, untouched during the training.
+    """
+    
     X_model, X_test, y_model, y_test = train_test_split(
         X,
         y,
@@ -159,6 +150,10 @@ def make_splits(
 
 
 def build_preprocessor(feature_groups: dict[str, list[str]]) -> ColumnTransformer:
+    """
+    This builds a preprocessing step for each feature group. 
+    """
+    
     numeric_pipeline = Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
     ])
