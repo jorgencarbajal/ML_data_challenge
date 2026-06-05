@@ -24,12 +24,6 @@ Expected runtime:
 - TabNet trains on CPU and may take a few minutes.
 - Clustering builds a 2,000 by 2,000 distance matrix and may also take a few minutes.
 
-Generated figures are saved in:
-
-```text
-figures/
-```
-
 For the cleanest rerun, restart the notebook kernel and run all cells from the top.
 
 ## Project Structure
@@ -37,9 +31,6 @@ For the cleanest rerun, restart the notebook kernel and run all cells from the t
 ```text
 data_challenge.ipynb        Self-contained final notebook
 data/                       Raw data and generated/intermediate data files
-figures/                    Notebook-generated report figures
-notes/report_v1.md          Detailed working report source
-notes/current_status.md     Current project checkpoint
 src/                        Script-based development pipelines
 ```
 
